@@ -94,7 +94,6 @@ static void	s_text_around(void)
 	COMPARE(" %s %s ", "", "-");
 	COMPARE(" %s %s ", " - ", "");
 	COMPARE(" %s %s %s %s %s ", " - ", "", "4", "", "2 ");
-	COMPARE("[%s] %d [%s]", "", 0, "");
 }
 
 static void	s_embedded_nul(void)
@@ -104,7 +103,6 @@ static void	s_embedded_nul(void)
 	COMPARE("%s", "\0");
 	COMPARE("%s", "\0abc");
 	COMPARE("[%s]", "abc\0def");
-	COMPARE("%s%c%s", "x", 0, "y");
 	COMPARE("%s|%s", "\0", "\0\0");
 }
 
@@ -115,7 +113,6 @@ static void	s_not_reinterpreted(void)
 	COMPARE("%s", "Test %s %d");
 	COMPARE("%s", "100%");
 	COMPARE("%s", "%");
-	COMPARE("%s%%", "%");
 }
 
 static void	s_long_and_high(void)
@@ -213,7 +210,6 @@ static void	i_values(void)
 	for (int i = 0; i < NINTS; i++)
 		COMPARE_DESC("\"%i\", list of edge values", "%i", g_ints[i]);
 	COMPARE("%i %i", INT_MAX, INT_MIN);
-	COMPARE("%i%d", -1, 1);
 }
 
 static void	d_sweep(void)
@@ -225,13 +221,32 @@ static void	d_sweep(void)
 	for (int v = INT_MAX - 1000; v < INT_MAX && v > 0; v += step)
 		COMPARE_DESC("\"%d\", INT_MAX-1000..INT_MAX", "%d", v);
 	for (int v = INT_MIN; v < INT_MIN + 1000; v += step)
-		COMPARE_DESC("\"%i\", INT_MIN..INT_MIN+1000", "%i", v);
+		COMPARE_DESC("\"%d\", INT_MIN..INT_MIN+1000", "%d", v);
 	for (long p = 1; p <= 1000000000L; p *= 10)
 	{
 		COMPARE_DESC("\"%d\", powers of ten and their neighbours", "%d", (int)p);
 		COMPARE_DESC("\"%d\", powers of ten and their neighbours", "%d", (int)(p - 1));
 		COMPARE_DESC("\"%d\", powers of ten and their neighbours", "%d", (int)-p);
 		COMPARE_DESC("\"%d\", powers of ten and their neighbours", "%d", (int)(1 - p));
+	}
+}
+
+static void	i_sweep(void)
+{
+	int	step = sweep_step();
+
+	for (int v = -10000; v <= 10000; v += step)
+		COMPARE_DESC("\"%i\", -10000..10000", "%i", v);
+	for (int v = INT_MAX - 1000; v < INT_MAX && v > 0; v += step)
+		COMPARE_DESC("\"%i\", INT_MAX-1000..INT_MAX", "%i", v);
+	for (int v = INT_MIN; v < INT_MIN + 1000; v += step)
+		COMPARE_DESC("\"%i\", INT_MIN..INT_MIN+1000", "%i", v);
+	for (long p = 1; p <= 1000000000L; p *= 10)
+	{
+		COMPARE_DESC("\"%i\", powers of ten and their neighbours", "%i", (int)p);
+		COMPARE_DESC("\"%i\", powers of ten and their neighbours", "%i", (int)(p - 1));
+		COMPARE_DESC("\"%i\", powers of ten and their neighbours", "%i", (int)-p);
+		COMPARE_DESC("\"%i\", powers of ten and their neighbours", "%i", (int)(1 - p));
 	}
 }
 
@@ -258,32 +273,44 @@ static void	u_values(void)
 
 /* ------------------------------------------------------------- %x / %X */
 
-static void	x_values(void)
+/* x_or_upper: 'x' or 'X'. Each conversion is tested on its own. */
+static void	hex_values(char conv)
 {
-	int	step = sweep_step();
+	char	fmt[3] = {'%', conv, '\0'};
+	int		step = sweep_step();
 
 	for (int i = 0; i < NINTS; i++)
-	{
-		COMPARE_DESC("\"%x\", list of edge values", "%x", (unsigned int)g_ints[i]);
-		COMPARE_DESC("\"%X\", list of edge values", "%X", (unsigned int)g_ints[i]);
-	}
-	COMPARE("%x", 0xdeadbeef);
-	COMPARE("%X", 0xDEADBEEF);
-	COMPARE("%X", 0x12AF5);
-	COMPARE("Lower: %x Upper: %X", 255, 255);
-	COMPARE("%x %d %X", -1, 0, -1);
-	COMPARE("%x.%d.%x.%d", 192, 168, 1, 1);
+		COMPARE_DESC(conv == 'x' ? "\"%x\", list of edge values"
+			: "\"%X\", list of edge values", fmt, (unsigned int)g_ints[i]);
 	for (int v = -4200; v <= 4200; v += step)
-	{
-		COMPARE_DESC("\"%x\", -4200..4200", "%x", v);
-		COMPARE_DESC("\"%X\", -4200..4200", "%X", v);
-	}
+		COMPARE_DESC(conv == 'x' ? "\"%x\", -4200..4200" : "\"%X\", -4200..4200",
+			fmt, v);
 	for (unsigned long b = 1; b <= 0x100000000UL; b <<= 4)
 	{
-		COMPARE_DESC("\"%x\", powers of 16 and their neighbours", "%x", (unsigned int)b);
-		COMPARE_DESC("\"%x\", powers of 16 and their neighbours", "%x", (unsigned int)(b - 1));
-		COMPARE_DESC("\"%X\", powers of 16 and their neighbours", "%X", (unsigned int)(b - 1));
+		COMPARE_DESC(conv == 'x' ? "\"%x\", powers of 16 and their neighbours"
+			: "\"%X\", powers of 16 and their neighbours", fmt, (unsigned int)b);
+		COMPARE_DESC(conv == 'x' ? "\"%x\", powers of 16 and their neighbours"
+			: "\"%X\", powers of 16 and their neighbours", fmt,
+			(unsigned int)(b - 1));
 	}
+}
+
+static void	x_values(void)
+{
+	hex_values('x');
+	COMPARE("%x", 0xdeadbeef);
+	COMPARE("%x", 255);
+	COMPARE("Hex: %x end", 123456);
+	COMPARE("%x %x", 0, -1);
+}
+
+static void	upper_x_values(void)
+{
+	hex_values('X');
+	COMPARE("%X", 0xDEADBEEF);
+	COMPARE("%X", 0x12AF5);
+	COMPARE("Hex: %X end", 123456);
+	COMPARE("%X %X", 0, -1);
 }
 
 /* ------------------------------------------------------------------ %% */
@@ -300,8 +327,6 @@ static void	percent(void)
 	COMPARE("%%d");
 	COMPARE("%%c");
 	COMPARE("%%s");
-	COMPARE("%c%%", 'x');
-	COMPARE("%%%d%%", 10);
 	COMPARE("Start %% End");
 }
 
@@ -325,6 +350,17 @@ static void	mixed(void)
 	COMPARE("%s %p", (char *)opaque_ptr(NULL), opaque_ptr(NULL));
 	COMPARE("User: %s (ID: %d) Access: %p", "Admin", 1, (void *)0x999);
 	COMPARE("Lorem %s dolor %d sit %c amet", "ipsum", 42, 'X');
+	/* moved here from the single-conversion cases (they mix conversions) */
+	COMPARE("[%s] %d [%s]", "", 0, "");
+	COMPARE("%s%c%s", "x", 0, "y");
+	COMPARE("%s%%", "%");
+	COMPARE("%i%d", -1, 1);
+	COMPARE("%c%%", 'x');
+	COMPARE("%%%d%%", 10);
+	COMPARE("Lower: %x Upper: %X", 255, 255);
+	COMPARE("%x %d %X", -1, 0, -1);
+	COMPARE("%x.%d.%x.%d", 192, 168, 1, 1);
+	COMPARE("%d %i", INT_MIN, INT_MAX);
 }
 
 static void	no_conversion(void)
@@ -399,22 +435,57 @@ static void	invalid_conversions(void)
 	COMPARE("100%k done");
 }
 
-static void	wrong_size_arguments(void)
+/* Tripouille: arguments wider than the conversion, one conversion each */
+static void	wrong_size_d(void)
 {
-	/* Tripouille: arguments wider than the conversion */
 	undefined_case();
 	COMPARE(" %d ", LONG_MAX);
 	COMPARE(" %d ", LONG_MIN);
 	COMPARE(" %d ", UINT_MAX);
 	COMPARE(" %d ", ULONG_MAX);
 	COMPARE(" %d ", 9223372036854775807LL);
+	COMPARE(" %d %d %d %d %d %d", INT_MAX, INT_MIN, LONG_MAX, LONG_MIN, ULONG_MAX, 0);
+}
+
+static void	wrong_size_i(void)
+{
+	undefined_case();
 	COMPARE(" %i ", LONG_MAX);
+	COMPARE(" %i ", LONG_MIN);
+	COMPARE(" %i ", ULONG_MAX);
+	COMPARE(" %i ", 9223372036854775807LL);
+}
+
+static void	wrong_size_u(void)
+{
+	undefined_case();
+	COMPARE(" %u ", LONG_MAX);
 	COMPARE(" %u ", LONG_MIN);
 	COMPARE(" %u ", ULONG_MAX);
+	COMPARE(" %u ", 9223372036854775807LL);
+}
+
+static void	wrong_size_x(void)
+{
+	undefined_case();
 	COMPARE(" %x ", LONG_MAX);
-	COMPARE(" %X ", LONG_MIN);
+	COMPARE(" %x ", LONG_MIN);
+	COMPARE(" %x ", ULONG_MAX);
 	COMPARE(" %x ", 9223372036854775807LL);
-	COMPARE(" %d %d %d %d %d %d", INT_MAX, INT_MIN, LONG_MAX, LONG_MIN, ULONG_MAX, 0);
+}
+
+static void	wrong_size_upper_x(void)
+{
+	undefined_case();
+	COMPARE(" %X ", LONG_MAX);
+	COMPARE(" %X ", LONG_MIN);
+	COMPARE(" %X ", ULONG_MAX);
+	COMPARE(" %X ", 9223372036854775807LL);
+}
+
+static void	wrong_size_p(void)
+{
+	undefined_case();
 	COMPARE(" %p ", -1);
 	COMPARE(" %p ", 1);
 	COMPARE(" %p ", 15);
@@ -532,38 +603,47 @@ static void	malloc_fails(void)
 
 int	main(void)
 {
-	printf("ft_printf: mandatory\n");
-	run_case("%c: letters, '%', several in a row", c_basic);
-	run_case("%c: '\\0' is written and counted (1 byte)", c_nul);
-	run_case("%c: text around, '\\0' first/middle/last", c_text_around);
-	run_case("%c: every value -1..256, INT_MIN/MAX, \\n \\r \\t", c_every_byte);
-	run_case("%s: basic strings", s_basic);
-	run_case("%s: NULL -> (null)", s_null);
-	run_case("%s: empty strings between text", s_text_around);
-	run_case("%s: stops at the '\\0' of the string", s_embedded_nul);
-	run_case("%s: a % inside the argument is not a conversion", s_not_reinterpreted);
-	run_case("%s: 10000 chars, high bytes, UTF-8", s_long_and_high);
-	run_case("format: stops at a '\\0' in the format", format_nul);
-	run_case("%p: stack, heap, small values", p_basic);
-	run_case("%p: NULL -> (nil)", p_null);
-	run_case("%p: -1, LONG_MIN/MAX, ULONG_MAX", p_limits);
-	run_case("%d: edge values", d_values);
-	run_case("%i: edge values", i_values);
-	run_case("%d/%i: -10000..10000, near the limits, powers of ten", d_sweep);
-	run_case("%u: edge values, -1, near UINT_MAX", u_values);
-	run_case("%x/%X: edge values, sweep, powers of 16", x_values);
-	run_case("%%: alone, repeated, between text", percent);
-	run_case("mixed: every conversion in one call", mixed);
-	run_case("no conversion: \"\", text, UTF-8 in the format", no_conversion);
-	run_case("30 arguments in one call", many_args);
-	run_case("6000-char format, 3000 conversions", long_format);
-	run_case("same call twice gives the same result", same_call_twice);
-	run_case("(undefined) invalid conversions: %k, trailing %, ...",
+	/* RUN(conversion, ...): `make c` etc. run only the cases of that tag.
+	** "" = several conversions mixed, or none: only in the full run. */
+	printf("ft_printf: mandatory%s\n", only_label());
+	RUN("c", "%c: letters, '%', several in a row", c_basic);
+	RUN("c", "%c: '\\0' is written and counted (1 byte)", c_nul);
+	RUN("c", "%c: text around, '\\0' first/middle/last", c_text_around);
+	RUN("c", "%c: every value -1..256, INT_MIN/MAX, \\n \\r \\t", c_every_byte);
+	RUN("s", "%s: basic strings", s_basic);
+	RUN("s", "%s: NULL -> (null)", s_null);
+	RUN("s", "%s: empty strings between text", s_text_around);
+	RUN("s", "%s: stops at the '\\0' of the string", s_embedded_nul);
+	RUN("s", "%s: a % inside the argument is not a conversion", s_not_reinterpreted);
+	RUN("s", "%s: 10000 chars, high bytes, UTF-8", s_long_and_high);
+	RUN("p", "%p: stack, heap, small values", p_basic);
+	RUN("p", "%p: NULL -> (nil)", p_null);
+	RUN("p", "%p: -1, LONG_MIN/MAX, ULONG_MAX", p_limits);
+	RUN("p", "(undefined) %p: an int instead of a pointer", wrong_size_p);
+	RUN("d", "%d: edge values", d_values);
+	RUN("d", "%d: -10000..10000, near the limits, powers of ten", d_sweep);
+	RUN("d", "(undefined) %d: arguments wider than int", wrong_size_d);
+	RUN("i", "%i: edge values", i_values);
+	RUN("i", "%i: -10000..10000, near the limits, powers of ten", i_sweep);
+	RUN("i", "(undefined) %i: arguments wider than int", wrong_size_i);
+	RUN("u", "%u: edge values, -1, near UINT_MAX", u_values);
+	RUN("u", "(undefined) %u: arguments wider than unsigned int", wrong_size_u);
+	RUN("x", "%x: edge values, sweep, powers of 16", x_values);
+	RUN("x", "(undefined) %x: arguments wider than unsigned int", wrong_size_x);
+	RUN("X", "%X: edge values, sweep, powers of 16", upper_x_values);
+	RUN("X", "(undefined) %X: arguments wider than unsigned int", wrong_size_upper_x);
+	RUN("%", "%%: alone, repeated, between text", percent);
+	RUN("", "format: stops at a '\\0' in the format", format_nul);
+	RUN("", "mixed: every conversion in one call", mixed);
+	RUN("", "no conversion: \"\", text, UTF-8 in the format", no_conversion);
+	RUN("", "30 arguments in one call", many_args);
+	RUN("", "6000-char format, 3000 conversions", long_format);
+	RUN("", "same call twice gives the same result", same_call_twice);
+	RUN("", "(undefined) invalid conversions: %k, trailing %, ...",
 		invalid_conversions);
-	run_case("(undefined) arguments wider than the conversion", wrong_size_arguments);
-	run_case("output is not buffered (ft_printf and write interleave)", no_buffering);
-	run_case("(defensive) ft_printf(NULL) -> like printf(NULL)", null_format);
-	run_case("(defensive) write() fails -> returns -1 like printf", write_fails);
-	run_case("(defensive) every malloc failing in turn -> no leak", malloc_fails);
+	RUN("", "output is not buffered (ft_printf and write interleave)", no_buffering);
+	RUN("", "(defensive) ft_printf(NULL) -> like printf(NULL)", null_format);
+	RUN("", "(defensive) write() fails -> returns -1 like printf", write_fails);
+	RUN("", "(defensive) every malloc failing in turn -> no leak", malloc_fails);
 	return (finish("ft_printf: mandatory"));
 }

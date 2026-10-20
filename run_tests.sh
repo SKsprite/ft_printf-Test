@@ -1,11 +1,15 @@
 #!/bin/sh
 # Usage: ./run_tests.sh [-v|-vv] [--checks|--checks-only|--no-checks]
-#                       [mandatory|bonus|star]      (default: mandatory)
+#                       [mandatory|bonus|star|c|s|p|d|i|u|x|X|%]
+#                       (default: mandatory)
 #   mandatory  checks + the mandatory tests (cspdiuxX%), on `make`
 #   bonus      checks + mandatory + bonus tests (flags, width, precision),
 #              on the library built by `make bonus`
 #   star       only the `*` tests (width/precision as arguments, not in the
 #              subject), on `make bonus` if your Makefile has it
+#   c s p d i u x X %
+#              only the mandatory cases that use that one conversion and
+#              nothing else (no mixes); no checks unless --checks
 # Checks run first for mandatory and bonus (--no-checks skips them):
 # your files built exactly the way the grader does (each .c on its own, no
 # -I), Makefile rules and relink, forbidden functions, README, norminette,
@@ -15,6 +19,7 @@
 #      RUNNER="valgrind ..." wraps each test binary
 #      TEST_TIMEOUT=N        seconds before a single case is killed (default 10)
 #      V=1 / V=2             same as -v / -vv (what `make V=1` sets)
+#      md=0                  skip the README.md check (what `make md=0` sets)
 # -v, --verbose  more detail on each failure: whole outputs, more failures
 #                per case, whole build logs
 # -vv            all of it in full
@@ -33,7 +38,7 @@ fi
 export PRINTF_DIR
 
 usage() {
-	echo "usage: $0 [-v|-vv] [--checks|--checks-only|--no-checks] [mandatory|bonus|star]"
+	echo "usage: $0 [-v|-vv] [--checks|--checks-only|--no-checks] [mandatory|bonus|star|c|s|p|d|i|u|x|X|%]"
 }
 VERBOSE="${V:-0}"
 CHECKS=""
@@ -60,12 +65,15 @@ case "$VERBOSE" in
 esac
 export VERBOSE
 MODE="${MODE:-mandatory}"
+ONLY=""
 case "$MODE" in
 	mandatory|bonus|star) ;;
+	c|s|p|d|i|u|x|X|%) ONLY="$MODE"; MODE=mandatory ;;
 	*) usage >&2; exit 2 ;;
 esac
+export ONLY
 if [ -z "$CHECKS" ]; then
-	if [ "$MODE" = star ]; then CHECKS=no; else CHECKS=yes; fi
+	if [ "$MODE" = star ] || [ -n "$ONLY" ]; then CHECKS=no; else CHECKS=yes; fi
 fi
 TEST_TIMEOUT="${TEST_TIMEOUT:-10}"
 export TEST_TIMEOUT
@@ -159,24 +167,36 @@ compile_hints() {
 # started this script (`make -s` would silence it, `-k` hide failures).
 submake() { env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL make "$@"; }
 
-# graded_files: what the subject turns in (Makefile, *.h, */*.h, *.c,
-# */*.c), relative to PRINTF_DIR, never the tester's own folder or .git.
-graded_files() {
+# project_files: every file of your project that would be pushed. In a git
+# repository: tracked files plus untracked ones that are not ignored
+# (.gitignore, .git/info/exclude). Outside git: every file. Never the
+# tester's own folder, .git, objects or archives.
+project_files() {
 	(
 		cd "$PRINTF_DIR" || exit 0
-		find . -maxdepth 2 \( -path ./.git -o -path "./${TESTER_REL:-.git}" \) -prune \
-			-o -type f \( -name '*.c' -o -name '*.h' \) -print | sed 's|^\./||'
-		[ -f Makefile ] && echo Makefile
-	) | sort
+		if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+			git ls-files -co --exclude-standard | while read -r f; do
+				[ -f "$f" ] && echo "$f"
+			done
+		else
+			find . \( -path ./.git -o -path "./${TESTER_REL:-.git}" \) -prune \
+				-o -type f -print | sed 's|^\./||'
+		fi
+	) | grep -v -e '\.o$' -e '\.a$' | { if [ -n "$TESTER_REL" ]; then grep -v "^$TESTER_REL/"; else cat; fi; } | sort
 }
 
-# copy_project <dest>: a clean copy of your project, without the tester,
-# .git, objects and archives (like the grader's fresh clone).
+# graded_files: what the subject turns in (Makefile, *.h, */*.h, *.c,
+# */*.c), relative to PRINTF_DIR.
+graded_files() {
+	project_files | grep -E '^([^/]+/)?[^/]+\.[ch]$|^Makefile$'
+}
+
+# copy_project <dest>: a clean copy of what you would push (project_files),
+# like the grader's fresh clone.
 copy_project() {
 	rm -rf "$1"
 	mkdir -p "$1"
-	(cd "$PRINTF_DIR" && tar -cf - --exclude=./.git --exclude="./${TESTER_REL:-.git}" \
-		--exclude='*.o' --exclude='*.a' .) | tar -xf - -C "$1"
+	project_files | (cd "$PRINTF_DIR" && tar -cf - -T -) | tar -xf - -C "$1"
 }
 
 # own_headers_regex: the names of your .h files, as (a\.h|b\.h)
@@ -231,15 +251,23 @@ compile_each() {
 git_graded() {
 	if [ -n "$TESTER_REL" ]; then
 		git -C "$PRINTF_DIR" "$@" -- ':(glob)*.c' ':(glob)*/*.c' ':(glob)*.h' \
-			':(glob)*/*.h' Makefile ":(exclude)$TESTER_REL"
+			':(glob)*/*.h' Makefile README.md ":(exclude)$TESTER_REL"
 	else
 		git -C "$PRINTF_DIR" "$@" -- ':(glob)*.c' ':(glob)*/*.c' ':(glob)*.h' \
-			':(glob)*/*.h' Makefile
+			':(glob)*/*.h' Makefile README.md
 	fi
 }
 
 check_git() {
 	upstream=""
+	# A folder with its own .git (e.g. a libft cloned into the project) is
+	# stored by git as a link: its files never reach the grader's clone.
+	nested=$(cd "$PRINTF_DIR" 2>/dev/null && find . -mindepth 2 -maxdepth 3 -name .git \
+		| sed 's|^\./||; s|/\.git$||' | grep -v "^${TESTER_REL:-.git}$" | tr '\n' ' ')
+	if [ -n "$nested" ]; then
+		ko "separate git repository inside your project: $nested(its own .git): git stores it as a link, so the grader's clone gets it empty"
+		hint "rm -rf <folder>/.git, then git add <folder>: its files become part of your repository"
+	fi
 	git -C "$PRINTF_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
 		warn "$PRINTF_DIR is not a git repository: can't check what you pushed"
 		return 1
@@ -380,23 +408,57 @@ check_makefile() {
 	done
 }
 
+# section_body <file> <name>: the lines under the "## <name>" heading, up to
+# the next heading of the same or a higher level
+section_body() {
+	awk -v name="$2" '
+		/^#+[[:space:]]/ {
+			level = match($0, /[^#]/) - 1
+			if (inside && level <= start) exit
+			if (!inside && tolower($0) ~ "^#+[[:space:]]*" tolower(name)) { inside = 1; start = level; next }
+		}
+		inside { print }' "$1"
+}
+
 check_readme() {
-	readme="$PRINTF_DIR/README.md"
-	if [ ! -f "$readme" ]; then
-		ko "no README.md at the root of the repository"
+	if [ "$md" = 0 ]; then
+		echo "  ${YELLOW}[SKIP]${RESET} README.md check (md=0)"
 		return
 	fi
+	readme="$PRINTF_DIR/README.md"
+	if [ ! -f "$readme" ]; then
+		other=$(cd "$PRINTF_DIR" && find . -maxdepth 1 -iname 'readme*' | sed 's|^\./||' | tr '\n' ' ')
+		if [ -n "$other" ]; then
+			ko "the README must be named README.md exactly (found: $other)"
+			hint "git mv <old name> README.md (on Linux, names are case-sensitive: readme.md is a different file)"
+		else
+			ko "no README.md at the root of the repository"
+		fi
+		return
+	fi
+	ok "README.md exists (exact name, at the root)"
 	first=$(head -n 1 "$readme")
-	if echo "$first" | grep -Eq '^[*_]This project has been created as part of the 42 curriculum by [^*_ ].*[^*_ ][*_][[:space:]]*$'; then
+	if echo "$first" | grep -q '<login'; then
+		ko "README.md: the first line still says <login>: put your 42 login(s) there"
+	elif echo "$first" | grep -Eq '^[*_]This project has been created as part of the 42 curriculum by [^*_ ].*[^*_ ][*_][[:space:]]*$'; then
 		ok "README.md: first line in italics with the 42 curriculum sentence"
 	else
 		ko "README.md: the first line must be in italics: *This project has been created as part of the 42 curriculum by <login>*"
 		{ err_header "checks: README first line"; echo "      first line is: $first"; } >&2
 	fi
 	for section in Description Instructions Resources; do
-		grep -Eiq "^#+[[:space:]]*$section" "$readme" \
-			|| ko "README.md: no \"$section\" section (a heading like ## $section)"
+		if ! grep -Eiq "^#+[[:space:]]*$section" "$readme"; then
+			ko "README.md: no \"$section\" section (a heading like ## $section)"
+		elif [ -z "$(section_body "$readme" "$section" | tr -d '[:space:]')" ]; then
+			ko "README.md: the \"$section\" section is empty"
+		fi
 	done
+	if [ -z "$(section_body "$readme" Resources | grep -Ei '(^|[^a-z])AI([^a-z]|$)|artificial intelligence|chatgpt|claude|copilot|llm')" ]; then
+		warn "README.md: the Resources section doesn't say how AI was used (the subject requires it, even \"AI was not used\")"
+	fi
+	if ! grep -Eiq 'algorithm' "$readme" || ! grep -Eiq 'data structure' "$readme"; then
+		warn "README.md: no explanation of your algorithm and data structure (the subject requires one)"
+	fi
 }
 
 run_checks() {

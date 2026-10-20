@@ -65,6 +65,18 @@ long	hook_nalloc(void);
 size_t	hook_nlive(void);
 void	hook_release(void);
 
+/*
+** RUN(tag, name, fn): run_case(name, fn), unless ONLY is set (make c,
+** make s, ... make %): then only the cases tagged with that conversion
+** run. A case is tagged only if every comparison in it uses that one
+** conversion; tag "" is for cases that mix conversions (full run only).
+*/
+# define RUN(tag, name, fn) run_tagged((tag), (name), (fn))
+
+void		run_tagged(const char *tag, const char *name, void (*fn)(void));
+/* " (%c only)" when ONLY is set, "" otherwise: for the suite title. */
+const char	*only_label(void);
+
 /* An int that the compiler can't see the value of (no folding). */
 int		opaque_int(int v);
 

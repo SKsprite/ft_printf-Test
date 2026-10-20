@@ -22,11 +22,16 @@ export PRINTF_DIR
 # Failure details go to stderr: `make 2> errors.log`.
 export V
 
+# md=0: skip the README.md check (`make md=0`, `make check md=0`).
+export md
+
 VALGRIND	= RUNNER="valgrind -q --leak-check=full --errors-for-leak-kinds=definite \
 			  --error-exitcode=42" TEST_TIMEOUT=120
 
+CONVS		= c s p d i u x X
+
 .PHONY: all test mandatory bonus star check build valgrind valgrind_bonus \
-		valgrind_star clean fclean re remove
+		valgrind_star clean fclean re remove $(CONVS) \%
 
 # `make`: checks (built like the grader does) + the mandatory tests only.
 all: mandatory
@@ -35,6 +40,15 @@ mandatory:
 	@./run_tests.sh mandatory
 
 test: mandatory
+
+# `make c`, `make s`, ... `make X`, `make %`: only the mandatory cases that
+# use that one conversion, with no other conversion mixed in. No checks.
+# (`\%` is a plain target named %, not a pattern.)
+$(CONVS):
+	@./run_tests.sh $@
+
+\%:
+	@./run_tests.sh %
 
 # Checks + mandatory + bonus tests, on the library built by `make bonus`.
 bonus:

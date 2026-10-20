@@ -83,7 +83,9 @@ Run these from inside the tester folder:
 | `make` | Checks, then the mandatory tests (on `make` in your project) |
 | `make bonus` | Checks, then the mandatory and bonus tests (on `make bonus`) |
 | `make star` | Only the `*` tests (on `make bonus` if you have that rule) |
+| `make c` `make s` `make p` `make d` `make i` `make u` `make x` `make X` `make %` | Only the mandatory cases that use that one conversion, with no other conversion mixed in (no checks) |
 | `make check` | Only the [checks](#checks-what-the-grader-sees) |
+| `make md=0` / `make check md=0` | The same, without the README.md check |
 | `make valgrind` / `valgrind_bonus` / `valgrind_star` | The same tests under valgrind (no checks) |
 | `make V=1` / `./run_tests.sh -v` | More detail on each failure (`V=2` / `-vv`: everything) |
 | `make 2> errors.log` | `[OK]`/`[KO]` lines on the console, every failure detail in `errors.log` |
@@ -92,7 +94,15 @@ Run these from inside the tester folder:
 | `make -C ft_printf-Test remove` | Deletes the whole tester folder. Run it from your project folder (see below) |
 
 `run_tests.sh` takes the same suites, plus `--checks`, `--checks-only` and
-`--no-checks`: `./run_tests.sh -v bonus`, `./run_tests.sh --no-checks`.
+`--no-checks`: `./run_tests.sh -v bonus`, `./run_tests.sh --no-checks`,
+`./run_tests.sh x`, `md=0 ./run_tests.sh`.
+
+**One conversion at a time.** `make s` runs only the cases where every
+call uses `%s` alone: the `NULL`, `\0`, long and UTF-8 cases. It runs
+nothing that mixes `%s` with another conversion. Cases that mix
+conversions (`"%s%c%s"`, `"%x %d %X"`, …) and cases about the format itself
+run in the full `make`. The title shows the filter:
+`ft_printf: mandatory (%s only)`.
 
 Before testing, `run_tests.sh` always runs `make` (or `make bonus`) in your
 project, so the tests use your current code. If you point `PRINTF_DIR` at a
@@ -122,6 +132,15 @@ checks build what the grader gets:
   compiles with an `-I` from your Makefile (e.g. `#include "libft.h"` in a
   top-level file) is a `[!!]` warning. A relative include,
   `#include "libft/libft.h"`, needs no `-I`
+- **what you would push**: in a git repository, that is your tracked
+  files plus untracked files that aren't ignored. Files ignored by
+  `.gitignore` or `.git/info/exclude` are never checked, and neither is the
+  tester's own folder. Outside git, it is every file
+- **a separate git repository inside your project** (e.g. a `libft/` that
+  still has its own `.git` because you cloned it in) is a KO. Git stores
+  such a folder as a link, not as files, so the grader's clone gets an
+  empty `libft/` and your Makefile fails. Fix: `rm -rf libft/.git`, then
+  `git add libft`
 - **git**: `[!!]` when a graded file (`Makefile, *.h, */*.h, *.c, */*.c`) is
   not committed or was never added, when commits are not pushed, or when the
   remote has commits you don't have (as of your last `git fetch`). When the
@@ -141,9 +160,19 @@ checks build what the grader gets:
   undefined in `libftprintf.a`. The `va_*` macros are compiler built-ins. An
   undefined `ft_` function means libft's objects aren't inside
   `libftprintf.a`
-- **README.md**: the first line is in italics,
-  `*This project has been created as part of the 42 curriculum by <login>*`,
-  and there are `Description`, `Instructions` and `Resources` sections
+- **README.md** (skip it with `md=0`):
+  - the file is named `README.md` **exactly**, at the root. `readme.md`,
+    `Readme.md` or `README.MD` is a KO that names the file found (names are
+    case-sensitive on Linux)
+  - the first line is in italics,
+    `*This project has been created as part of the 42 curriculum by <login>*`,
+    with your login, not the `<login>` placeholder
+  - `Description`, `Instructions` and `Resources` sections exist and are not
+    empty
+  - `[!!]` when the Resources section doesn't say how AI was used, or when
+    nothing explains your algorithm and data structure (the subject asks for
+    both)
+  - `README.md` is included in the git checks
 - **norminette** on the graded files only. The tester's own files are never
   checked
 

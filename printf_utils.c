@@ -114,6 +114,26 @@ int	opaque_int(int v)
 	return (x);
 }
 
+void	run_tagged(const char *tag, const char *name, void (*fn)(void))
+{
+	const char	*only = getenv("ONLY");
+
+	if (only && *only && strcmp(only, tag) != 0)
+		return ;
+	run_case(name, fn);
+}
+
+const char	*only_label(void)
+{
+	static char	label[32];
+	const char	*only = getenv("ONLY");
+
+	if (!only || !*only)
+		return ("");
+	snprintf(label, sizeof(label), " (%%%s only)", only);
+	return (label);
+}
+
 void	undefined_case(void)
 {
 	g_undefined = 1;
